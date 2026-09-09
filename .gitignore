@@ -1,0 +1,9 @@
+node_modules/
+dist/
+*.log
+.env
+.DS_Store
+
+# Local, machine-specific MCP registration (absolute paths).
+# Register with: claude mcp add --transport stdio mycontext -- node "$PWD/dist/index.js"
+.mcp.json

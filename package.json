@@ -1,0 +1,41 @@
+{
+  "name": "mycontext",
+  "version": "0.1.0",
+  "description": "A local environment to collect, manage, and own your personal data. Includes an MCP server for AI access and a simple web UI for fast capture.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Ben Coleman (https://github.com/bencoleman24)",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bencoleman24/mycontext.git"
+  },
+  "bin": {
+    "mycontext": "./dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "web": "tsx src/web/server.ts",
+    "setup": "tsx src/setup.ts",
+    "build": "tsup src/index.ts --format esm --dts --clean",
+    "start": "node dist/index.js",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "eslint": "^10.0.0",
+    "tsup": "^8.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.6.0",
+    "typescript-eslint": "^8.0.0",
+    "vitest": "^4.0.0"
+  }
+}

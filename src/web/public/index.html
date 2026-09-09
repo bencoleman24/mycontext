@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>mycontext</title>
+<link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+<div class="shell">
+  <nav class="sidebar">
+    <div class="wordmark">mycontext</div>
+    <button class="nav-item" data-view="dashboard">Home</button>
+    <button class="nav-item" data-view="profile">Profile</button>
+    <button class="nav-item" data-view="habits">Habits</button>
+    <button class="nav-item" data-view="journal">Journal</button>
+    <button class="nav-item" data-view="thoughts">Thoughts</button>
+    <button class="nav-item" data-view="files">Files</button>
+    <button class="nav-item" data-view="data">Data</button>
+  </nav>
+
+  <main class="main">
+    <!-- Dashboard -->
+    <section class="view" data-view="dashboard">
+      <header class="page-head">
+        <p class="eyebrow" id="dash-date"></p>
+        <h1 id="dash-greeting">Welcome</h1>
+      </header>
+
+      <div class="ledger">
+        <p class="eyebrow" id="dash-habits-label">Habits</p>
+        <div class="list" id="dash-habits"></div>
+      </div>
+
+      <div class="ledger">
+        <p class="eyebrow">Quick note</p>
+        <form class="inline" id="dash-thought-form">
+          <input type="text" id="dash-thought-content" required />
+          <button type="submit">Save</button>
+        </form>
+      </div>
+
+      <div class="ledger">
+        <p class="eyebrow">Recent</p>
+        <div class="list" id="dash-recent"></div>
+      </div>
+    </section>
+
+    <!-- Profile -->
+    <section class="view" data-view="profile">
+      <header class="page-head">
+        <p class="eyebrow">Who you are</p>
+        <h1>Profile</h1>
+      </header>
+      <div class="ledger">
+        <p class="eyebrow">Basic information</p>
+        <form class="stack" id="profile-form">
+          <div>
+            <label for="profile-name">Name</label>
+            <input type="text" id="profile-name" name="name" />
+          </div>
+          <div class="field-row">
+            <div>
+              <label for="profile-age">Age</label>
+              <input type="text" inputmode="numeric" id="profile-age" name="age" />
+            </div>
+            <div>
+              <label for="profile-location">Location</label>
+              <input type="text" id="profile-location" placeholder="Where are you located?" />
+            </div>
+          </div>
+          <div>
+            <label for="profile-occupation">Occupation</label>
+            <input type="text" id="profile-occupation" placeholder="What do you do?" />
+          </div>
+          <div>
+            <label for="profile-bio">Bio</label>
+            <textarea id="profile-bio" name="bio"></textarea>
+          </div>
+
+          <button type="submit">Save profile</button>
+        </form>
+      </div>
+
+      <div class="ledger">
+        <p class="eyebrow">Focus and goals</p>
+        <p class="eyebrow form-section-label">Goals</p>
+        <div class="chip-select" id="profile-goals-list"></div>
+        <form class="inline small-form" id="add-goal-form">
+          <input type="text" id="new-goal" placeholder="Add a goal" required />
+          <button type="submit" class="small">Add</button>
+        </form>
+
+        <p class="eyebrow form-section-label">Challenges</p>
+        <div class="chip-select" id="profile-challenges-list"></div>
+        <form class="inline small-form" id="add-challenge-form">
+          <input type="text" id="new-challenge" placeholder="Add a challenge" required />
+          <button type="submit" class="small">Add</button>
+        </form>
+      </div>
+
+      <div class="ledger">
+        <h2>Custom questions</h2>
+        <div class="list" id="profile-questions-list"></div>
+        <form class="inline" id="add-question-form">
+          <input type="text" id="new-question-label" placeholder="New question" required />
+          <select id="new-question-type" class="select-inline">
+            <option value="text">Text</option>
+            <option value="multiselect">Multiple choice</option>
+          </select>
+          <button type="submit">Add question</button>
+        </form>
+        <button type="button" id="save-question-answers">Save text answers</button>
+      </div>
+
+      <div class="ledger">
+        <p class="eyebrow">Raw data</p>
+        <h2>View as JSON</h2>
+        <div class="json-toolbar">
+          <button type="button" class="ghost small" id="toggle-profile-json">Show JSON</button>
+          <button type="button" class="ghost small" id="copy-profile-json">Copy JSON</button>
+        </div>
+        <pre class="json-view" id="profile-json" hidden></pre>
+        <div class="file-path-row">
+          <span class="eyebrow">File location</span>
+          <code id="profile-path-value">…</code>
+          <button type="button" class="ghost small" id="copy-profile-path">Copy path</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Habits -->
+    <section class="view" data-view="habits">
+      <header class="page-head">
+        <p class="eyebrow">Track daily, weekly, or monthly</p>
+        <h1>Habits</h1>
+      </header>
+      <div class="ledger">
+        <form class="inline" id="habit-form">
+          <input type="text" id="habit-name" placeholder="New habit, e.g. Meditate" required />
+          <select id="habit-frequency" class="select-inline">
+            <option value="daily">Daily</option>
+            <option value="weekly">Weekly</option>
+            <option value="monthly">Monthly</option>
+          </select>
+          <button type="submit">Add</button>
+        </form>
+        <div class="list" id="habits-list"></div>
+        <div class="json-toolbar">
+          <button type="button" class="ghost small" id="toggle-archived-habits">Show archived habits</button>
+        </div>
+        <div class="list" id="archived-habits-list" hidden></div>
+      </div>
+
+      <div class="ledger">
+        <p class="eyebrow">Raw data</p>
+        <h2>View as CSV</h2>
+        <div class="json-toolbar">
+          <button type="button" class="ghost small" id="toggle-habits-csv">Show CSV</button>
+          <button type="button" class="ghost small" id="copy-habits-csv">Copy CSV</button>
+        </div>
+        <pre class="json-view" id="habits-csv" hidden></pre>
+        <div class="file-path-row">
+          <span class="eyebrow">File location</span>
+          <code id="habits-csv-path-value">…</code>
+          <button type="button" class="ghost small" id="copy-habits-csv-path">Copy path</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Journal -->
+    <section class="view" data-view="journal">
+      <header class="page-head">
+        <p class="eyebrow">Longer form</p>
+        <h1>Journal</h1>
+      </header>
+      <div class="ledger">
+        <form class="stack" id="journal-form">
+          <div>
+            <label for="journal-title">Title</label>
+            <input type="text" id="journal-title" required />
+          </div>
+          <div>
+            <label for="journal-content">Entry</label>
+            <textarea id="journal-content" required></textarea>
+          </div>
+          <div>
+            <label for="journal-tag-input">Tags</label>
+            <div class="chip-select" id="journal-tags-pending"></div>
+            <div class="small-form">
+              <input type="text" id="journal-tag-input" placeholder="Add a tag" />
+              <button type="button" class="small" id="add-journal-tag">Add</button>
+            </div>
+          </div>
+          <button type="submit">Add entry</button>
+        </form>
+        <div class="json-toolbar">
+          <button type="button" class="ghost small" id="backfill-journal-summaries">Backfill summaries</button>
+        </div>
+        <p class="hint" id="backfill-summary-status" hidden></p>
+        <div class="list" id="journal-list"></div>
+      </div>
+    </section>
+
+    <!-- Thoughts -->
+    <section class="view" data-view="thoughts">
+      <header class="page-head">
+        <p class="eyebrow">Quick capture</p>
+        <h1>Thoughts</h1>
+      </header>
+      <div class="ledger">
+        <form class="inline" id="thought-form">
+          <input type="text" id="thought-content" required />
+          <button type="submit">Save</button>
+        </form>
+        <div class="list" id="thoughts-list"></div>
+      </div>
+    </section>
+
+    <!-- Files -->
+    <section class="view" data-view="files">
+      <header class="page-head">
+        <p class="eyebrow">Attachments</p>
+        <h1>Files</h1>
+      </header>
+      <div class="ledger">
+        <form class="stack" id="file-form">
+          <div>
+            <label for="file-title">Title</label>
+            <input type="text" id="file-title" required />
+          </div>
+          <div>
+            <label for="file-description">Description</label>
+            <textarea id="file-description"></textarea>
+          </div>
+          <div>
+            <label for="file-input">File (25MB max)</label>
+            <input type="file" id="file-input" required />
+          </div>
+          <div>
+            <label for="file-journal-link">Attach to journal entry (optional)</label>
+            <select id="file-journal-link">
+              <option value="">None — standalone file</option>
+            </select>
+          </div>
+          <button type="submit">Upload</button>
+        </form>
+        <div class="list" id="files-list"></div>
+      </div>
+    </section>
+
+    <!-- Data -->
+    <section class="view" data-view="data">
+      <header class="page-head">
+        <p class="eyebrow">Personal context export</p>
+        <h1>Data</h1>
+      </header>
+
+      <div class="ledger">
+        <p class="eyebrow">Format</p>
+        <div class="chip-select" id="export-format-chips"></div>
+
+        <p class="eyebrow form-section-label">Include</p>
+        <div class="chip-select" id="export-section-chips"></div>
+        <p class="hint" id="export-csv-hint" hidden>CSV only includes habit log data.</p>
+
+        <p class="eyebrow form-section-label">Date range</p>
+        <div class="chip-select" id="export-range-chips"></div>
+        <div class="field-row" id="export-date-fields" hidden>
+          <div>
+            <label for="export-from">From</label>
+            <input type="date" id="export-from" />
+          </div>
+          <div>
+            <label for="export-to">To</label>
+            <input type="date" id="export-to" />
+          </div>
+        </div>
+
+        <p class="eyebrow form-section-label">Journal detail</p>
+        <div class="chip-select" id="export-journal-detail-chips"></div>
+        <p class="hint" id="export-journal-detail-hint" hidden>Only applies when Journal is included.</p>
+      </div>
+
+      <div class="ledger">
+        <button type="button" class="primary-wide" id="generate-export">Generate export</button>
+      </div>
+
+      <div class="ledger" id="export-result" hidden>
+        <p class="eyebrow">Result</p>
+        <h2>Export ready</h2>
+        <div class="file-path-row">
+          <span class="eyebrow">Format</span>
+          <code id="export-result-format"></code>
+          <span class="eyebrow">Size</span>
+          <code id="export-result-size"></code>
+          <span class="eyebrow">Tokens</span>
+          <code id="export-result-tokens"></code>
+        </div>
+        <p class="hint" id="export-large-warning" hidden>This export is large and may be too big for some AI tools.</p>
+        <div class="json-toolbar">
+          <button type="button" class="ghost small" id="toggle-export-preview">Show preview</button>
+          <button type="button" class="ghost small" id="copy-export-content">Copy contents</button>
+        </div>
+        <pre class="json-view" id="export-preview" hidden></pre>
+        <form class="inline" id="download-export-form">
+          <input type="text" id="export-filename" />
+          <button type="submit">Download file</button>
+        </form>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script src="/app.js" type="module"></script>
+</body>
+</html>
