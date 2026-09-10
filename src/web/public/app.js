@@ -273,8 +273,8 @@ function addPendingJournalTag() {
 function questionOptionChipHtml(question, option) {
   const selected = question.answer.includes(option);
   return `
-    <span class="chip">
-      <button type="button" class="chip-toggle" data-action="toggle-question-option" data-question-id="${question.id}" data-option="${escapeHtml(option)}" data-selected="${selected}">${escapeHtml(option)}</button>
+    <span class="option-chip">
+      <button type="button" class="choice-chip" data-action="toggle-question-option" data-question-id="${question.id}" data-option="${escapeHtml(option)}" data-selected="${selected}">${escapeHtml(option)}</button>
       <button type="button" class="chip-remove" data-action="remove-question-option" data-question-id="${question.id}" data-option="${escapeHtml(option)}" aria-label="Remove option ${escapeHtml(option)}">×</button>
     </span>`;
 }
