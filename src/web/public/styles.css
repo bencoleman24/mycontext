@@ -281,6 +281,14 @@ body {
   border-radius: var(--radius);
 }
 
+/* The global `button` rule sets align-self: flex-start (for buttons in column
+   forms), which otherwise pins a row's own action buttons to the top instead
+   of centering them like their sibling elements when the row grows taller
+   than one line (e.g. a wrapped habit-name sub line). */
+.row > button {
+  align-self: center;
+}
+
 .row:hover {
   background: var(--surface);
 }
@@ -360,7 +368,7 @@ body {
   border: none;
   background: transparent;
   color: var(--ink-soft);
-  padding: 6px 10px;
+  padding: 5px 10px;
   cursor: pointer;
 }
 
