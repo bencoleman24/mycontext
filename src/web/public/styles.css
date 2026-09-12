@@ -574,18 +574,18 @@ button {
   align-self: flex-start;
 }
 
-button.ghost {
+.ghost {
   background: transparent;
   color: var(--ink-soft);
   border: 1px solid var(--line);
 }
 
-button.ghost:hover {
+.ghost:hover {
   color: var(--ink);
   border-color: var(--ink-soft);
 }
 
-button.small {
+.small {
   font-size: 11px;
   padding: 5px 9px;
 }
@@ -657,6 +657,18 @@ button.primary-wide:hover {
   display: inline-flex;
   align-items: center;
   text-decoration: none;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+/* form.inline already carries margin-bottom: 18px, so this closes the extra
+   22px needed to match the 40px gap between ledger blocks -- keeping the
+   quick-note-to-journal-link gap visually even with the habits-to-quick-note
+   gap above it. */
+.dash-journal-cta {
+  margin-top: 22px;
 }
 
 .empty {
