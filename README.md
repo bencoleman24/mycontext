@@ -13,7 +13,13 @@ Includes:
 - an MCP server, so your AI assistant reads and writes the data directly
 - plain JSON files you can read without this app, and export as Markdown, JSON, or CSV
 
-<!-- TODO: screenshot of the web UI goes here -->
+<table>
+  <tr>
+    <td align="center" width="33%"><a href="docs/images/home.png"><img src="docs/images/home.png" height="180" alt="The mycontext web UI home page"></a><br><sub>Log your personal data in the web UI</sub></td>
+    <td align="center" width="33%"><a href="docs/images/journal_json_example.png"><img src="docs/images/journal_json_example.png" height="180" alt="A journal.json data file open in an editor"></a><br><sub>Stored as plain JSON files</sub></td>
+    <td align="center" width="33%"><a href="docs/images/hero.png"><img src="docs/images/hero.png" height="180" alt="Claude answering &quot;What have I been slipping on this week, and why?&quot; using mycontext data"></a><br><sub>Ask AI about your data</sub></td>
+  </tr>
+</table>
 
 ## Why mycontext
 
