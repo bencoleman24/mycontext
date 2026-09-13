@@ -11,7 +11,7 @@ Includes:
 
 - a local workflow for personal data management
 - an MCP server, so AI apps like ChatGPT, Claude, Cursor, and Gemini can read and write the data directly
-- plain JSON files you can read without this app, and export as Markdown, JSON, or CSV
+- plain JSON files you can read without this app, and export as Markdown, JSON, or CSV for personal use
 
 <table>
   <tr>
