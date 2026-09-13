@@ -1,28 +1,38 @@
 ---
 name: Bug report
-about: Create a report to help us improve
+about: Something isn't working
 title: ''
-labels: ''
+labels: bug
 assignees: ''
-
 ---
 
-**Describe the bug**
-A clear and concise description of what the bug is.
+<!--
+Don't paste real personal data (journal entries, habits, profile). Use made-up examples.
+Security problems: report privately instead. See SECURITY.md.
+-->
 
-**To Reproduce**
-Steps to reproduce the behavior:
-1. Go to '...'
-2. Click on '....'
-3. Scroll down to '....'
-4. See error
+**What happened?**
 
-**Expected behavior**
-A clear and concise description of what you expected to happen.
+**What did you expect to happen?**
 
-**Screenshots**
-If applicable, add screenshots to help explain your problem.
+**Steps to reproduce**
 
+1.
+2.
 
-**Additional context**
-Add any other context about the problem here.
+**Where did it happen?**
+
+- [ ] Web UI
+- [ ] Through an AI app (MCP)
+- [ ] Install or `npm run setup`
+
+**Environment**
+
+- AI app and version, if through MCP:
+- OS:
+- Node version (`node -v`):
+- mycontext version (`git rev-parse --short HEAD`):
+
+**Error message or logs**
+
+<!-- If an AI app shows mycontext as disconnected, docs/mcp.md has a troubleshooting section. -->
