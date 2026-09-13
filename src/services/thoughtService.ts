@@ -1,4 +1,4 @@
-import { nowIso } from "../lib/dates.js";
+import { nowIso, rangeEndIso, rangeStartIso } from "../lib/dates.js";
 import { newId } from "../lib/ids.js";
 import { AddThoughtSchema, ListThoughtsSchema } from "../schemas/thought.js";
 import type { Thought } from "../schemas/thought.js";
@@ -19,9 +19,11 @@ export async function listThoughts(
   input: z.infer<typeof ListThoughtsSchema>,
 ): Promise<Thought[]> {
   const thoughts = await thoughtStore.list();
+  const from = input.from ? rangeStartIso(input.from) : undefined;
+  const to = input.to ? rangeEndIso(input.to) : undefined;
   return thoughts
-    .filter((thought) => (input.from ? thought.createdAt >= input.from : true))
-    .filter((thought) => (input.to ? thought.createdAt <= input.to : true))
+    .filter((thought) => (from ? thought.createdAt >= from : true))
+    .filter((thought) => (to ? thought.createdAt <= to : true))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
     .slice(0, input.limit);
 }

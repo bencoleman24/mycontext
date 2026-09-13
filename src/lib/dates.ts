@@ -37,3 +37,20 @@ export function startOfWeek(date: string): string {
 export function startOfMonth(date: string): string {
   return `${date.slice(0, 7)}-01`;
 }
+
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Inclusive range start as an ISO timestamp. A plain YYYY-MM-DD means the
+ * start of that UTC day. A full timestamp is normalized to UTC so string
+ * comparison against stored createdAt values is exact.
+ */
+export function rangeStartIso(bound: string): string {
+  return DATE_ONLY.test(bound) ? `${bound}T00:00:00.000Z` : new Date(bound).toISOString();
+}
+
+/** Inclusive range end as an ISO timestamp. A plain YYYY-MM-DD means the end of that UTC day. */
+export function rangeEndIso(bound: string): string {
+  return DATE_ONLY.test(bound) ? `${bound}T23:59:59.999Z` : new Date(bound).toISOString();
+}
+

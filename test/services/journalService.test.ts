@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useTempDataDir } from "../testDataDir.js";
 import type { Summarizer } from "../../src/lib/summarizer.js";
+import { SearchJournalSchema } from "../../src/schemas/journal.js";
+import { ListThoughtsSchema } from "../../src/schemas/thought.js";
 
 let cleanup: () => Promise<void>;
 let journalService: typeof import("../../src/services/journalService.js");
@@ -131,3 +133,38 @@ describe("journal entry summaries", () => {
     expect(entries.find((e) => e.id === willSucceed.id)?.summary).toBe("A fake summary.");
   });
 });
+
+describe("searchJournal date range", () => {
+  it("accepts plain dates and includes both whole days", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      for (const [at, title] of [
+        ["2024-01-31T23:59:59.999Z", "Day before"],
+        ["2024-02-01T00:00:00.000Z", "First moment"],
+        ["2024-02-28T23:59:59.999Z", "Last moment"],
+        ["2024-02-29T00:00:00.000Z", "Day after"],
+      ] as const) {
+        vi.setSystemTime(new Date(at));
+        await journalService.addJournalEntry({ title, content: "entry", tags: [] });
+      }
+
+      const results = await journalService.searchJournal({ from: "2024-02-01", to: "2024-02-28", limit: 50 });
+      expect(results.map((entry) => entry.title)).toEqual(["Last moment", "First moment"]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe("date range schemas used by search_journal and list_thoughts", () => {
+  it.each(["2026-09-06", "2026-09-06T10:00:00Z", "2026-09-06T10:00:00.000-04:00"])("accepts %s", (value) => {
+    expect(SearchJournalSchema.safeParse({ from: value, to: value }).success).toBe(true);
+    expect(ListThoughtsSchema.safeParse({ from: value, to: value }).success).toBe(true);
+  });
+
+  it.each(["09/06/2026", "2026-9-6", "yesterday"])("rejects %s", (value) => {
+    expect(SearchJournalSchema.safeParse({ from: value }).success).toBe(false);
+    expect(ListThoughtsSchema.safeParse({ from: value }).success).toBe(false);
+  });
+});
+

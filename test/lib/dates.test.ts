@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { previousDate, startOfMonth, startOfWeek, todayDate } from "../../src/lib/dates.js";
+import { previousDate, rangeEndIso, rangeStartIso, startOfMonth, startOfWeek, todayDate } from "../../src/lib/dates.js";
 
 describe("previousDate", () => {
   it("steps back a single day within a month", () => {
@@ -84,3 +84,16 @@ describe("todayDate", () => {
     expect(todayDate()).toBe("2024-01-11");
   });
 });
+
+describe("rangeStartIso / rangeEndIso", () => {
+  it("expands a plain date to the whole UTC day", () => {
+    expect(rangeStartIso("2026-09-06")).toBe("2026-09-06T00:00:00.000Z");
+    expect(rangeEndIso("2026-09-06")).toBe("2026-09-06T23:59:59.999Z");
+  });
+
+  it("normalizes full timestamps to UTC with milliseconds, so string comparison is exact", () => {
+    expect(rangeStartIso("2026-09-06T10:00:00Z")).toBe("2026-09-06T10:00:00.000Z");
+    expect(rangeEndIso("2026-09-06T21:15:00-04:00")).toBe("2026-09-07T01:15:00.000Z");
+  });
+});
+

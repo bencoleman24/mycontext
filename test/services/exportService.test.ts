@@ -179,6 +179,21 @@ describe("exportContext date range", () => {
 
     expect(result.content).toContain("current streak 2 days");
   });
+
+  it("labels streaks in the habit's own period and explains that the current period isn't counted", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2024-01-10T12:00:00.000Z"));
+    const habit = await habitService.createHabit({ name: "Weekly review", frequency: "weekly" });
+    await habitService.logHabitCompletion({ habitId: habit.id, date: "2023-12-26", status: "Y" });
+    await habitService.logHabitCompletion({ habitId: habit.id, date: "2024-01-02", status: "Y" });
+
+    const result = await exportService.exportContext({ format: "markdown", sections: ["habits"] });
+
+    expect(result.content).toContain("**Weekly review** (weekly)");
+    expect(result.content).toContain("current streak 2 weeks");
+    expect(result.content).not.toContain("streak 2 days");
+    expect(result.content).toContain("count completed periods only");
+  });
 });
 
 describe("exportContext journalDetail", () => {

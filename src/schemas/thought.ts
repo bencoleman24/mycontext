@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { RangeFromSchema, RangeToSchema } from "./dateRange.js";
 
 export const ThoughtSchema = z.object({
   id: z.uuid(),
@@ -23,7 +24,7 @@ export const AddThoughtSchema = z.object({
 });
 
 export const ListThoughtsSchema = z.object({
-  from: z.iso.datetime().optional(),
-  to: z.iso.datetime().optional(),
+  from: RangeFromSchema,
+  to: RangeToSchema,
   limit: z.number().int().positive().max(500).default(50),
 });

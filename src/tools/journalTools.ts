@@ -29,7 +29,7 @@ export function registerJournalTools(server: McpServer): void {
     {
       title: "Search journal",
       description:
-        "Search journal entries by free-text query, tags, mood, and/or date range. Returns matches newest-first.",
+        "Search journal entries by free-text query, tags, mood, and/or date range. Date bounds are inclusive and accept a plain date (YYYY-MM-DD) or a full ISO 8601 timestamp. Returns matches newest-first.",
       inputSchema: SearchJournalSchema.shape,
     },
     async (input) => jsonResult(await searchJournal(input)),

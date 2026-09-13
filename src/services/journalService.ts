@@ -1,4 +1,4 @@
-import { nowIso } from "../lib/dates.js";
+import { nowIso, rangeEndIso, rangeStartIso } from "../lib/dates.js";
 import { newId } from "../lib/ids.js";
 import { getSummarizer } from "../lib/summarizer.js";
 import type { Summarizer } from "../lib/summarizer.js";
@@ -58,10 +58,12 @@ export async function searchJournal(
 ): Promise<JournalEntry[]> {
   const entries = await journalStore.list();
   const query = input.query?.toLowerCase();
+  const from = input.from ? rangeStartIso(input.from) : undefined;
+  const to = input.to ? rangeEndIso(input.to) : undefined;
 
   const matches = entries.filter((entry) => {
-    if (input.from && entry.createdAt < input.from) return false;
-    if (input.to && entry.createdAt > input.to) return false;
+    if (from && entry.createdAt < from) return false;
+    if (to && entry.createdAt > to) return false;
     if (input.mood && entry.mood !== input.mood) return false;
     if (input.tags && input.tags.length > 0) {
       const hasAllTags = input.tags.every((tag) => entry.tags.includes(tag));

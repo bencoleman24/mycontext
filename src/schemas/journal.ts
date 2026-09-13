@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { RangeFromSchema, RangeToSchema } from "./dateRange.js";
 
 export const JournalEntrySchema = z.object({
   id: z.uuid(),
@@ -50,7 +51,7 @@ export const SearchJournalSchema = z.object({
   query: z.string().optional(),
   tags: z.array(z.string()).optional(),
   mood: z.string().optional(),
-  from: z.iso.datetime().optional(),
-  to: z.iso.datetime().optional(),
+  from: RangeFromSchema,
+  to: RangeToSchema,
   limit: z.number().int().positive().max(500).default(50),
 });

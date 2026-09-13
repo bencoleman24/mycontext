@@ -17,7 +17,7 @@ export function registerHabitTools(server: McpServer): void {
     {
       title: "List habits",
       description:
-        "List the user's habits, including frequency (daily/weekly/monthly), current streak, longest streak, all-time completion rate, and whether the current period (today/this week/this month) has already been logged.",
+        "List the user's habits, including frequency (daily/weekly/monthly), current streak, longest streak, all-time completion rate, and whether the current period (today/this week/this month) has already been logged. Streaks and completion rate count completed periods only: the current period isn't included until it ends, so a habit logged today still shows its streak through yesterday. This is intended, not an off-by-one error.",
       inputSchema: {
         includeArchived: z.boolean().optional().describe("Include archived habits (default false)."),
       },

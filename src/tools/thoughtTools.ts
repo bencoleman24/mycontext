@@ -19,7 +19,8 @@ export function registerThoughtTools(server: McpServer): void {
     "list_thoughts",
     {
       title: "List thoughts",
-      description: "List saved quick thoughts, newest first, optionally within a date range.",
+      description:
+        "List saved quick thoughts, newest first, optionally within an inclusive date range. Date bounds accept a plain date (YYYY-MM-DD) or a full ISO 8601 timestamp.",
       inputSchema: ListThoughtsSchema.shape,
     },
     async (input) => jsonResult(await listThoughts(input)),

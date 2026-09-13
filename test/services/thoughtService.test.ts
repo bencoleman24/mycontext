@@ -68,6 +68,22 @@ describe("thoughtService", () => {
     expect(thoughts.map((t) => t.content)).toEqual(["In range"]);
   });
 
+  it("treats plain dates as whole days, inclusive at both ends", async () => {
+    vi.useFakeTimers();
+    for (const [at, content] of [
+      ["2024-01-31T23:59:59.999Z", "Day before"],
+      ["2024-02-01T00:00:00.000Z", "First moment"],
+      ["2024-02-28T23:59:59.999Z", "Last moment"],
+      ["2024-02-29T00:00:00.000Z", "Day after"],
+    ] as const) {
+      vi.setSystemTime(new Date(at));
+      await thoughtService.addThought({ content });
+    }
+
+    const thoughts = await thoughtService.listThoughts({ from: "2024-02-01", to: "2024-02-28", limit: 50 });
+    expect(thoughts.map((t) => t.content)).toEqual(["Last moment", "First moment"]);
+  });
+
   it("deletes a thought", async () => {
     const thought = await thoughtService.addThought({ content: "Delete me" });
     expect(await thoughtService.deleteThought(thought.id)).toBe(true);

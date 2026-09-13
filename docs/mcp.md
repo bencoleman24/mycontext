@@ -21,7 +21,7 @@
 
 | Tool | Description |
 |---|---|
-| `list_habits` | Active habits with streaks, completion rates, and current-period status |
+| `list_habits` | Active habits with streaks, completion rates, and current-period status. Streaks and rates count completed periods only. |
 | `create_habit` | Create a habit with a daily/weekly/monthly frequency |
 | `log_habit_completion` | Log `Y`/`N`/`NA` for a date, with an optional note |
 | `get_habit_history` | Full log history for one habit |
@@ -38,7 +38,7 @@ Streak and completion rules are in [habit periods](data-model.md#habit-periods).
 | `add_journal_entry` | Add an entry (accepts an optional `summary` at creation time) |
 | `update_journal_entry` | Edit an existing entry |
 | `delete_journal_entry` | Delete an entry |
-| `search_journal` | Search by free text, tags, mood, and date range |
+| `search_journal` | Search by free text, tags, mood, and date range. Dates are inclusive: `YYYY-MM-DD` or a full timestamp. |
 | `set_journal_summary` | Write a summary directly |
 | `generate_journal_summary` | Generate one locally via Ollama |
 | `backfill_journal_summaries` | Generate summaries for every entry missing one |
@@ -50,7 +50,7 @@ See [journal summaries](journal-summaries.md) for how the summary field works.
 | Tool | Description |
 |---|---|
 | `add_thought` | Save a quick note |
-| `list_thoughts` | List thoughts, optionally by date range |
+| `list_thoughts` | List thoughts, optionally by date range. Dates are inclusive: `YYYY-MM-DD` or a full timestamp. |
 | `delete_thought` | Delete a thought |
 
 ### Files

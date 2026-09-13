@@ -2,6 +2,7 @@ import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 import { getDataDir } from "../config.js";
+import { rangeEndIso, rangeStartIso } from "../lib/dates.js";
 import { estimatedTokenCount } from "../lib/summarize.js";
 import { getProfile } from "./profileService.js";
 import { listProfileQuestions } from "./profileQuestionService.js";
@@ -55,11 +56,13 @@ const FILE_DESCRIPTION =
 const PRIVACY_NOTE =
   "This file contains personal information and should be handled with appropriate privacy considerations. It is intended for personal data analysis and AI tools.";
 
+const STREAK_UNITS = { daily: "days", weekly: "weeks", monthly: "months" } as const;
+
 /** Converts inclusive YYYY-MM-DD bounds to the full ISO datetime bounds journal/thought filtering expects. */
 function toDateTimeBounds(from?: string, to?: string): { fromIso?: string; toIso?: string } {
   return {
-    fromIso: from ? `${from}T00:00:00.000Z` : undefined,
-    toIso: to ? `${to}T23:59:59.999Z` : undefined,
+    fromIso: from ? rangeStartIso(from) : undefined,
+    toIso: to ? rangeEndIso(to) : undefined,
   };
 }
 
@@ -161,10 +164,15 @@ async function generateMarkdown(
     if (habits.length > 0) {
       lines.push("## Habit Tracker Data", "");
       lines.push(`Total habits: ${habits.length}`, "");
+      lines.push(
+        "Streaks and completion rates count completed periods only. The current day, week, or month isn't included until it ends.",
+        "",
+      );
       for (const habit of habits) {
         const percentage = (habit.completionRate * 100).toFixed(1);
+        const unit = STREAK_UNITS[habit.frequency];
         lines.push(
-          `- **${habit.name}:** ${percentage}% completion, current streak ${habit.currentStreak} days, longest streak ${habit.longestStreak} days`,
+          `- **${habit.name}** (${habit.frequency}): ${percentage}% completion, current streak ${habit.currentStreak} ${unit}, longest streak ${habit.longestStreak} ${unit}`,
         );
       }
       lines.push("");
