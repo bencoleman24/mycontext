@@ -15,9 +15,7 @@ export function getProfilePath(): string {
 }
 
 export async function updateProfile(update: ProfileUpdate): Promise<Profile> {
-  const existing = await profileStore.read();
-
-  const next: Profile = {
+  return profileStore.update((existing) => ({
     id: existing?.id ?? newId(),
     name: update.name ?? existing?.name,
     bio: update.bio ?? existing?.bio,
@@ -31,7 +29,5 @@ export async function updateProfile(update: ProfileUpdate): Promise<Profile> {
     additionalContext: existing?.additionalContext ?? {},
     preferences: update.preferences ?? existing?.preferences ?? {},
     updatedAt: nowIso(),
-  };
-
-  return profileStore.write(next);
+  }));
 }

@@ -1,4 +1,5 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { mkdir, readdir, readFile, utimes, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { z } from "zod";
@@ -136,5 +137,74 @@ describe("JsonSingletonStore", () => {
     expect(await store.read()).toEqual({ count: 5 });
 
     expect(await readRaw(filePath)).toEqual({ schemaVersion: 1, value: { count: 5 } });
+  });
+});
+
+describe("concurrent writes", () => {
+  const lockFiles = async () => (await readdir(dataDir)).filter((name) => name.endsWith(".lock"));
+
+  it("keeps every item when many upserts run at once", async () => {
+    const store = new JsonCollectionStore(path.join(dataDir, "items.json"), FileSchema, 1);
+    await Promise.all(Array.from({ length: 25 }, (_, i) => store.upsert({ id: `i${i}`, label: `item ${i}` })));
+    expect(await store.list()).toHaveLength(25);
+  });
+
+  it("keeps every item when separate store instances write the same file, as separate processes would", async () => {
+    const file = path.join(dataDir, "items.json");
+    const a = new JsonCollectionStore(file, FileSchema, 1);
+    const b = new JsonCollectionStore(file, FileSchema, 1);
+    await Promise.all(
+      Array.from({ length: 20 }, (_, i) => (i % 2 ? a : b).upsert({ id: `i${i}`, label: `item ${i}` })),
+    );
+    expect(await a.list()).toHaveLength(20);
+  });
+
+  it("applies overlapping read-modify-write updates without losing any", async () => {
+    const store = new JsonSingletonStore(path.join(dataDir, "counter.json"), SingletonFileSchema, 1);
+    await store.write({ count: 0 });
+    await Promise.all(Array.from({ length: 30 }, () => store.update((current) => ({ count: (current?.count ?? 0) + 1 }))));
+    expect(await store.read()).toEqual({ count: 30 });
+  });
+
+  it("releases the lock after a write fails validation", async () => {
+    const store = new JsonCollectionStore(path.join(dataDir, "items.json"), FileSchema, 1);
+    // @ts-expect-error intentionally invalid item
+    await expect(store.upsert({ id: "a" })).rejects.toThrow(/invalid data/i);
+    expect(await lockFiles()).toEqual([]);
+    await expect(store.upsert({ id: "b", label: "ok" })).resolves.toEqual({ id: "b", label: "ok" });
+  });
+
+  it("leaves the file untouched when an update throws", async () => {
+    const file = path.join(dataDir, "items.json");
+    const store = new JsonCollectionStore(file, FileSchema, 1);
+    await store.upsert({ id: "a", label: "first" });
+    const before = await readFile(file, "utf-8");
+    await expect(
+      store.update((items) => {
+        items.push({ id: "b", label: "second" });
+        throw new Error("nope");
+      }),
+    ).rejects.toThrow("nope");
+    expect(await readFile(file, "utf-8")).toBe(before);
+    expect(await lockFiles()).toEqual([]);
+  });
+
+  it("takes over a stale lock left behind by a crashed process", async () => {
+    const file = path.join(dataDir, "items.json");
+    await writeFile(`${file}.lock`, "12345 crashed", "utf-8");
+    const old = new Date(Date.now() - 60_000);
+    await utimes(`${file}.lock`, old, old);
+
+    const store = new JsonCollectionStore(file, FileSchema, 1);
+    await store.upsert({ id: "a", label: "first" });
+    expect(await store.list()).toEqual([{ id: "a", label: "first" }]);
+    expect(await lockFiles()).toEqual([]);
+  });
+
+  it("doesn't create a file when an update changes nothing", async () => {
+    const file = path.join(dataDir, "items.json");
+    const store = new JsonCollectionStore(file, FileSchema, 1);
+    expect(await store.delete("missing")).toBe(false);
+    expect(existsSync(file)).toBe(false);
   });
 });

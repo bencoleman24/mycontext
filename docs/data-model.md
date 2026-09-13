@@ -17,6 +17,8 @@ Everything lives in `~/.mycontext/`, or wherever `MYCONTEXT_DATA_DIR` points. Th
 
 Streaks and completion rates aren't stored. They're computed from the logs on every read.
 
+While a file is being written you may briefly see a matching `.lock` file, such as `habits.json.lock`. It stops two writes from overlapping, including writes from separate processes, and it's removed when the write finishes. If one is ever left behind by a crashed process, it's ignored after 10 seconds.
+
 ## Habit periods
 
 A habit's period depends on its frequency:

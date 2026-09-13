@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, open, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { z } from "zod";
 import type { CollectionStore, SingletonStore } from "./dataStore.js";
@@ -109,6 +109,67 @@ async function writeJsonFile<T extends Record<string, unknown>>(
   return result.data;
 }
 
+// --- Write lock ------------------------------------------------------------
+//
+// Every write is read-modify-write on a whole file, so two writers that
+// overlap would each read the old contents and the last rename would win,
+// silently dropping the other's change. AI clients make parallel tool calls
+// and some start several server processes at once, so writes are serialized
+// with a lock file next to the data file. It works across processes, not
+// just within one. Reads don't need it: writes land via atomic rename, so a
+// reader always sees a complete file.
+
+const LOCK_STALE_MS = 10_000;
+const LOCK_TIMEOUT_MS = 15_000;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function withFileLock<R>(filePath: string, fn: () => Promise<R>): Promise<R> {
+  await ensureDir(filePath);
+  const lockPath = `${filePath}.lock`;
+  const started = Date.now();
+  let delay = 5;
+
+  for (;;) {
+    try {
+      const handle = await open(lockPath, "wx");
+      await handle.writeFile(`${process.pid} ${new Date().toISOString()}\n`);
+      await handle.close();
+      break;
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
+    }
+
+    // A lock this old was left behind by a process that died mid-write.
+    try {
+      const { mtimeMs } = await stat(lockPath);
+      if (Date.now() - mtimeMs > LOCK_STALE_MS) {
+        await rm(lockPath, { force: true });
+        continue;
+      }
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") continue;
+      throw err;
+    }
+
+    if (Date.now() - started > LOCK_TIMEOUT_MS) {
+      throw new Error(
+        `Timed out waiting to write ${filePath}. If no other mycontext process is running, delete ${lockPath}.`,
+      );
+    }
+    await sleep(delay + Math.random() * delay);
+    delay = Math.min(delay * 2, 100);
+  }
+
+  try {
+    return await fn();
+  } finally {
+    await rm(lockPath, { force: true });
+  }
+}
+
 /**
  * A collection persisted as a single JSON file of shape
  * `{ schemaVersion, items: T[] }`, keyed by `item.id`.
@@ -121,7 +182,7 @@ export class JsonCollectionStore<T extends { id: string }> implements Collection
     private readonly migrations: MigrationMap = {},
   ) {}
 
-  private async readFile(): Promise<{ items: T[] }> {
+  private async load(): Promise<{ items: T[]; migrated: boolean }> {
     const { data, migrated } = await readJsonFile(
       this.filePath,
       this.fileSchema,
@@ -129,15 +190,14 @@ export class JsonCollectionStore<T extends { id: string }> implements Collection
       this.version,
       this.migrations,
     );
-    if (migrated) {
-      await writeJsonFile(this.filePath, this.fileSchema, data, this.version);
-    }
-    return data;
+    return { items: data.items, migrated };
   }
 
   async list(): Promise<T[]> {
-    const file = await this.readFile();
-    return file.items;
+    const { items, migrated } = await this.load();
+    if (!migrated) return items;
+    // Persist the upgrade under the lock, re-reading in case another writer got there first.
+    return this.update((current) => [...current]);
   }
 
   async get(id: string): Promise<T | undefined> {
@@ -145,36 +205,51 @@ export class JsonCollectionStore<T extends { id: string }> implements Collection
     return items.find((item) => item.id === id);
   }
 
+  /**
+   * Read, change, and write the collection as one step no other writer can
+   * interleave with. `mutate` edits `items` in place and returns a result.
+   * Throwing inside `mutate` leaves the file untouched.
+   */
+  async update<R>(mutate: (items: T[]) => R | Promise<R>): Promise<R> {
+    return withFileLock(this.filePath, async () => {
+      const { items, migrated } = await this.load();
+      const before = JSON.stringify(items);
+      const result = await mutate(items);
+      if (migrated || JSON.stringify(items) !== before) {
+        await writeJsonFile(this.filePath, this.fileSchema, { items }, this.version);
+      }
+      return result;
+    });
+  }
+
   async upsert(item: T): Promise<T> {
-    const items = await this.list();
-    const index = items.findIndex((existing) => existing.id === item.id);
-    if (index >= 0) {
-      items[index] = item;
-    } else {
-      items.push(item);
-    }
-    await writeJsonFile(this.filePath, this.fileSchema, { items }, this.version);
-    return item;
+    return this.update((items) => {
+      const index = items.findIndex((existing) => existing.id === item.id);
+      if (index >= 0) {
+        items[index] = item;
+      } else {
+        items.push(item);
+      }
+      return item;
+    });
   }
 
   async delete(id: string): Promise<boolean> {
-    const items = await this.list();
-    const next = items.filter((item) => item.id !== id);
-    const changed = next.length !== items.length;
-    if (changed) {
-      await writeJsonFile(this.filePath, this.fileSchema, { items: next }, this.version);
-    }
-    return changed;
+    return this.update((items) => {
+      const index = items.findIndex((item) => item.id === id);
+      if (index < 0) return false;
+      items.splice(index, 1);
+      return true;
+    });
   }
 
   async deleteMany(predicate: (item: T) => boolean): Promise<number> {
-    const items = await this.list();
-    const next = items.filter((item) => !predicate(item));
-    const removed = items.length - next.length;
-    if (removed > 0) {
-      await writeJsonFile(this.filePath, this.fileSchema, { items: next }, this.version);
-    }
-    return removed;
+    return this.update((items) => {
+      const kept = items.filter((item) => !predicate(item));
+      const removed = items.length - kept.length;
+      items.splice(0, items.length, ...kept);
+      return removed;
+    });
   }
 }
 
@@ -189,22 +264,33 @@ export class JsonSingletonStore<T> implements SingletonStore<T> {
     private readonly migrations: MigrationMap = {},
   ) {}
 
+  private load(): Promise<{ data: { value: T | null }; migrated: boolean }> {
+    return readJsonFile(this.filePath, this.fileSchema, { value: null as T | null }, this.version, this.migrations);
+  }
+
   async read(): Promise<T | null> {
-    const { data, migrated } = await readJsonFile(
-      this.filePath,
-      this.fileSchema,
-      { value: null as T | null },
-      this.version,
-      this.migrations,
-    );
-    if (migrated) {
-      await writeJsonFile(this.filePath, this.fileSchema, data, this.version);
-    }
-    return data.value;
+    const { data, migrated } = await this.load();
+    if (!migrated) return data.value;
+    return withFileLock(this.filePath, async () => {
+      const current = await this.load();
+      if (current.migrated) {
+        await writeJsonFile(this.filePath, this.fileSchema, current.data, this.version);
+      }
+      return current.data.value;
+    });
+  }
+
+  /** Read, change, and write the record as one step no other writer can interleave with. */
+  async update(change: (current: T | null) => T | Promise<T>): Promise<T> {
+    return withFileLock(this.filePath, async () => {
+      const { data } = await this.load();
+      const next = await change(data.value);
+      await writeJsonFile(this.filePath, this.fileSchema, { value: next }, this.version);
+      return next;
+    });
   }
 
   async write(value: T): Promise<T> {
-    await writeJsonFile(this.filePath, this.fileSchema, { value }, this.version);
-    return value;
+    return this.update(() => value);
   }
 }

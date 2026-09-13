@@ -30,22 +30,23 @@ export async function addJournalEntry(
 export async function updateJournalEntry(
   input: z.infer<typeof UpdateJournalEntrySchema>,
 ): Promise<JournalEntry> {
-  const existing = await journalStore.get(input.id);
-  if (!existing) {
-    throw new Error(`No journal entry found with id ${input.id}`);
-  }
-
-  const updated: JournalEntry = {
-    ...existing,
-    title: input.title ?? existing.title,
-    content: input.content ?? existing.content,
-    tags: input.tags ?? existing.tags,
-    mood: input.mood ?? existing.mood,
-    entryType: input.entryType ?? existing.entryType,
-    updatedAt: nowIso(),
-  };
-
-  return journalStore.upsert(updated);
+  return journalStore.update((entries) => {
+    const index = entries.findIndex((entry) => entry.id === input.id);
+    if (index < 0) {
+      throw new Error(`No journal entry found with id ${input.id}`);
+    }
+    const existing = entries[index];
+    entries[index] = {
+      ...existing,
+      title: input.title ?? existing.title,
+      content: input.content ?? existing.content,
+      tags: input.tags ?? existing.tags,
+      mood: input.mood ?? existing.mood,
+      entryType: input.entryType ?? existing.entryType,
+      updatedAt: nowIso(),
+    };
+    return entries[index];
+  });
 }
 
 export async function deleteJournalEntry(id: string): Promise<boolean> {
@@ -83,19 +84,19 @@ export async function setJournalSummary(
   summary: string,
   backend: string,
 ): Promise<JournalEntry> {
-  const existing = await journalStore.get(id);
-  if (!existing) {
-    throw new Error(`No journal entry found with id ${id}`);
-  }
-
-  const updated: JournalEntry = {
-    ...existing,
-    summary,
-    summaryBackend: backend,
-    summaryGeneratedAt: nowIso(),
-  };
-
-  return journalStore.upsert(updated);
+  return journalStore.update((entries) => {
+    const index = entries.findIndex((entry) => entry.id === id);
+    if (index < 0) {
+      throw new Error(`No journal entry found with id ${id}`);
+    }
+    entries[index] = {
+      ...entries[index],
+      summary,
+      summaryBackend: backend,
+      summaryGeneratedAt: nowIso(),
+    };
+    return entries[index];
+  });
 }
 
 export async function generateJournalSummary(

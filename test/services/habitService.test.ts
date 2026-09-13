@@ -6,7 +6,9 @@ let habitService: typeof import("../../src/services/habitService.js");
 
 beforeEach(async () => {
   vi.resetModules();
-  vi.useFakeTimers();
+  // Freeze only the clock. Faking setTimeout too would stall the storage
+  // write lock's retry wait whenever two writes overlap.
+  vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date("2024-01-10T12:00:00.000Z"));
   const temp = await useTempDataDir();
   cleanup = temp.cleanup;
@@ -174,6 +176,23 @@ describe("habitService streak and completion math", () => {
   it("defaults new habits to daily frequency", async () => {
     const habit = await makeHabit();
     expect(habit.frequency).toBe("daily");
+  });
+});
+
+describe("concurrent writes", () => {
+  it("saves every habit when many are created at once", async () => {
+    await Promise.all(Array.from({ length: 10 }, (_, i) => makeHabit(`Habit ${i}`)));
+    expect(await habitService.listHabits()).toHaveLength(10);
+  });
+
+  it("keeps one log per period when check-ins for the same day arrive at once", async () => {
+    const habit = await makeHabit();
+    await Promise.all(
+      (["Y", "N", "Y", "NA", "Y"] as const).map((status) =>
+        habitService.logHabitCompletion({ habitId: habit.id, date: "2024-01-09", status }),
+      ),
+    );
+    expect(await habitService.getHabitHistory(habit.id)).toHaveLength(1);
   });
 });
 

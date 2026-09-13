@@ -130,11 +130,14 @@ export async function createHabit(
 }
 
 export async function setHabitArchived(id: string, archived: boolean): Promise<Habit> {
-  const habit = await habitStore.get(id);
-  if (!habit) {
-    throw new Error(`No habit found with id ${id}`);
-  }
-  return habitStore.upsert({ ...habit, archived });
+  return habitStore.update((habits) => {
+    const index = habits.findIndex((habit) => habit.id === id);
+    if (index < 0) {
+      throw new Error(`No habit found with id ${id}`);
+    }
+    habits[index] = { ...habits[index], archived };
+    return habits[index];
+  });
 }
 
 /** Deletes a habit and all of its logged history. */
@@ -155,20 +158,25 @@ export async function logHabitCompletion(
   }
 
   const periodKey = periodKeyFor(input.date, habit.frequency);
-  const logs = await habitLogStore.list();
-  const existing = logs.find(
-    (log) => log.habitId === input.habitId && log.date === periodKey,
-  );
 
-  const log: HabitLog = {
-    id: existing?.id ?? newId(),
-    habitId: input.habitId,
-    date: periodKey,
-    status: input.status,
-    note: input.note,
-  };
-
-  return habitLogStore.upsert(log);
+  // Find-then-write happens under the store's lock, so two check-ins for the
+  // same period can't both miss each other and create duplicate entries.
+  return habitLogStore.update((logs) => {
+    const index = logs.findIndex((log) => log.habitId === input.habitId && log.date === periodKey);
+    const log: HabitLog = {
+      id: index >= 0 ? logs[index].id : newId(),
+      habitId: input.habitId,
+      date: periodKey,
+      status: input.status,
+      note: input.note,
+    };
+    if (index >= 0) {
+      logs[index] = log;
+    } else {
+      logs.push(log);
+    }
+    return log;
+  });
 }
 
 export async function getHabitHistory(

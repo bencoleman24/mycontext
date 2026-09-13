@@ -150,3 +150,18 @@ describe("addProfileQuestionOption / removeProfileQuestionOption", () => {
     }
   });
 });
+
+describe("concurrent writes", () => {
+  it("seeds the default questions once when several callers list at the same time", async () => {
+    await Promise.all(Array.from({ length: 5 }, () => profileQuestionService.listProfileQuestions()));
+    expect(await profileQuestionService.listProfileQuestions()).toHaveLength(7);
+  });
+
+  it("keeps every option when several are added at once", async () => {
+    const question = await profileQuestionService.createProfileQuestion({ type: "multiselect", label: "Tools" });
+    const options = Array.from({ length: 8 }, (_, i) => `option ${i}`);
+    await Promise.all(options.map((option) => profileQuestionService.addProfileQuestionOption(question.id, option)));
+    const saved = (await profileQuestionService.listProfileQuestions()).find((q) => q.id === question.id);
+    expect(saved && "options" in saved ? [...saved.options].sort() : []).toEqual([...options].sort());
+  });
+});

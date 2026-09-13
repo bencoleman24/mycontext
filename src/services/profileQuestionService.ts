@@ -21,29 +21,32 @@ const DEFAULT_TEXT_QUESTIONS: Array<{ legacyKey: string; label: string }> = [
  * data isn't lost when this system replaces them.
  */
 export async function ensureDefaultProfileQuestions(): Promise<void> {
-  const existing = await profileQuestionStore.list();
-  if (existing.length > 0) return;
+  if ((await profileQuestionStore.list()).length > 0) return;
 
   const profile = await getProfile();
-
-  const priorities: ProfileQuestion = {
-    id: newId(),
-    type: "multiselect",
-    label: "Priorities",
-    options: [...FOCUS_AREA_OPTIONS],
-    answer: profile?.focusAreas ?? [],
-  };
-  await profileQuestionStore.upsert(priorities);
-
-  for (const { legacyKey, label } of DEFAULT_TEXT_QUESTIONS) {
-    const question: ProfileQuestion = {
+  const defaults: ProfileQuestion[] = [
+    {
       id: newId(),
-      type: "text",
-      label,
-      answer: profile?.additionalContext?.[legacyKey] ?? "",
-    };
-    await profileQuestionStore.upsert(question);
-  }
+      type: "multiselect",
+      label: "Priorities",
+      options: [...FOCUS_AREA_OPTIONS],
+      answer: profile?.focusAreas ?? [],
+    },
+    ...DEFAULT_TEXT_QUESTIONS.map(
+      ({ legacyKey, label }): ProfileQuestion => ({
+        id: newId(),
+        type: "text",
+        label,
+        answer: profile?.additionalContext?.[legacyKey] ?? "",
+      }),
+    ),
+  ];
+
+  // Re-check under the lock: several processes can start at once, and only
+  // the first should seed.
+  await profileQuestionStore.update((questions) => {
+    if (questions.length === 0) questions.push(...defaults);
+  });
 }
 
 export async function listProfileQuestions(): Promise<ProfileQuestion[]> {
@@ -82,53 +85,61 @@ export async function answerProfileQuestion(
   id: string,
   answer: string | string[],
 ): Promise<ProfileQuestion> {
-  const question = await profileQuestionStore.get(id);
-  if (!question) {
-    throw new Error(`No profile question found with id ${id}`);
-  }
-
-  if (question.type === "text") {
-    if (typeof answer !== "string") {
-      throw new Error(`"${question.label}" expects a text answer.`);
+  return updateQuestion(id, (question) => {
+    if (question.type === "text") {
+      if (typeof answer !== "string") {
+        throw new Error(`"${question.label}" expects a text answer.`);
+      }
+      return { ...question, answer };
     }
-    return profileQuestionStore.upsert({ ...question, answer });
-  }
 
-  if (!Array.isArray(answer)) {
-    throw new Error(`"${question.label}" expects a list of selected options.`);
-  }
-  const invalid = answer.filter((value) => !question.options.includes(value));
-  if (invalid.length > 0) {
-    throw new Error(`"${question.label}" doesn't have these option(s): ${invalid.join(", ")}`);
-  }
-  return profileQuestionStore.upsert({ ...question, answer });
+    if (!Array.isArray(answer)) {
+      throw new Error(`"${question.label}" expects a list of selected options.`);
+    }
+    const invalid = answer.filter((value) => !question.options.includes(value));
+    if (invalid.length > 0) {
+      throw new Error(`"${question.label}" doesn't have these option(s): ${invalid.join(", ")}`);
+    }
+    return { ...question, answer };
+  });
+}
+
+/** Find a question, change it, and save it as one locked step. */
+function updateQuestion(
+  id: string,
+  change: (question: ProfileQuestion) => ProfileQuestion,
+): Promise<ProfileQuestion> {
+  return profileQuestionStore.update((questions) => {
+    const index = questions.findIndex((question) => question.id === id);
+    if (index < 0) {
+      throw new Error(`No profile question found with id ${id}`);
+    }
+    questions[index] = change(questions[index]);
+    return questions[index];
+  });
 }
 
 export async function addProfileQuestionOption(id: string, option: string): Promise<ProfileQuestion> {
-  const question = await profileQuestionStore.get(id);
-  if (!question) {
-    throw new Error(`No profile question found with id ${id}`);
-  }
-  if (question.type !== "multiselect") {
-    throw new Error(`"${question.label}" is a text question and doesn't have options.`);
-  }
-  if (question.options.includes(option)) {
-    return question;
-  }
-  return profileQuestionStore.upsert({ ...question, options: [...question.options, option] });
+  return updateQuestion(id, (question) => {
+    if (question.type !== "multiselect") {
+      throw new Error(`"${question.label}" is a text question and doesn't have options.`);
+    }
+    if (question.options.includes(option)) {
+      return question;
+    }
+    return { ...question, options: [...question.options, option] };
+  });
 }
 
 export async function removeProfileQuestionOption(id: string, option: string): Promise<ProfileQuestion> {
-  const question = await profileQuestionStore.get(id);
-  if (!question) {
-    throw new Error(`No profile question found with id ${id}`);
-  }
-  if (question.type !== "multiselect") {
-    throw new Error(`"${question.label}" is a text question and doesn't have options.`);
-  }
-  return profileQuestionStore.upsert({
-    ...question,
-    options: question.options.filter((o) => o !== option),
-    answer: question.answer.filter((a) => a !== option),
+  return updateQuestion(id, (question) => {
+    if (question.type !== "multiselect") {
+      throw new Error(`"${question.label}" is a text question and doesn't have options.`);
+    }
+    return {
+      ...question,
+      options: question.options.filter((o) => o !== option),
+      answer: question.answer.filter((a) => a !== option),
+    };
   });
 }
