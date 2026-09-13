@@ -4,6 +4,9 @@ dist/
 .env
 .DS_Store
 
-# Local, machine-specific MCP registration (absolute paths).
-# Register with: claude mcp add --transport stdio mycontext -- node "$PWD/dist/index.js"
+# Project-scoped MCP configs contain absolute paths on your machine.
 .mcp.json
+.cursor/mcp.json
+.vscode/mcp.json
+.gemini/settings.json
+.codex/config.toml

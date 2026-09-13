@@ -1,167 +1,155 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { execFileSync } from "node:child_process";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
-  claudeDesktopConfigPath,
-  mergeMcpServerConfig,
-  registerWithClaudeCli,
-  registerWithClaudeDesktop,
-  type CommandResult,
+  APPS,
+  codexToml,
+  mcpServersJson,
+  onPath,
+  renderSetupOutput,
+  shellQuote,
+  vsCodeAddMcpArg,
+  vsCodeServerJson,
+  type Environment,
 } from "../src/setup.js";
 
-const ENTRY = "/abs/path/to/mycontext/dist/index.js";
+// A path with a space and a quote, since real paths have both.
+const ENTRY = "/Users/alex/My Projects/it's mycontext/dist/index.js";
 
-describe("mergeMcpServerConfig", () => {
-  it("adds mycontext to an empty config", () => {
-    const { config, alreadyPresent } = mergeMcpServerConfig({}, ENTRY);
-    expect(alreadyPresent).toBe(false);
-    expect(config).toEqual({ mcpServers: { mycontext: { command: "node", args: [ENTRY] } } });
+function fakeEnv(present: string[] = [], overrides: Partial<Environment> = {}): Environment {
+  const set = new Set(present);
+  return {
+    platform: "darwin",
+    home: "/Users/alex",
+    pathVar: "/usr/bin:/opt/homebrew/bin",
+    exists: (p) => set.has(p),
+    ...overrides,
+  };
+}
+
+const detected = (env: Environment) => APPS.filter((app) => app.detected(env)).map((app) => app.name);
+
+describe("app list", () => {
+  it("is alphabetical, so no provider is listed first by preference", () => {
+    const names = APPS.map((app) => app.name);
+    expect(names).toEqual([...names].sort((a, b) => a.localeCompare(b)));
   });
 
-  it("handles missing/malformed existing config the same as empty", () => {
-    expect(mergeMcpServerConfig(undefined, ENTRY).config).toEqual({
-      mcpServers: { mycontext: { command: "node", args: [ENTRY] } },
-    });
-    expect(mergeMcpServerConfig(null, ENTRY).config).toEqual({
-      mcpServers: { mycontext: { command: "node", args: [ENTRY] } },
-    });
-    expect(mergeMcpServerConfig([1, 2, 3], ENTRY).config).toEqual({
-      mcpServers: { mycontext: { command: "node", args: [ENTRY] } },
-    });
+  it("covers the local-server apps from each major provider", () => {
+    const all = APPS.map((app) => app.name).join(" | ");
+    for (const name of ["ChatGPT", "Claude", "Cursor", "Gemini", "VS Code"]) {
+      expect(all).toContain(name);
+    }
   });
 
-  it("preserves other servers and top-level keys already in the config", () => {
-    const existing = {
-      someOtherTopLevelKey: true,
-      mcpServers: { other: { command: "node", args: ["/other/server.js"] } },
-    };
-    const { config } = mergeMcpServerConfig(existing, ENTRY);
-    expect(config).toEqual({
-      someOtherTopLevelKey: true,
-      mcpServers: {
-        other: { command: "node", args: ["/other/server.js"] },
-        mycontext: { command: "node", args: [ENTRY] },
-      },
-    });
-  });
-
-  it("leaves an already-present mycontext entry completely untouched", () => {
-    const existing = {
-      mcpServers: { mycontext: { command: "node", args: [ENTRY], env: { MYCONTEXT_DATA_DIR: "/custom" } } },
-    };
-    const { config, alreadyPresent } = mergeMcpServerConfig(existing, ENTRY);
-    expect(alreadyPresent).toBe(true);
-    expect(config).toEqual(existing);
+  it("puts the server path in every app's instructions", () => {
+    for (const app of APPS) {
+      expect(app.instructions(ENTRY, fakeEnv()), app.name).toContain("My Projects/it");
+    }
   });
 });
 
-describe("claudeDesktopConfigPath", () => {
-  it("resolves the macOS path under the home directory", () => {
-    const result = claudeDesktopConfigPath("darwin", {});
-    expect(result).toMatch(/Library\/Application Support\/Claude\/claude_desktop_config\.json$/);
+describe("config snippets", () => {
+  it("mcpServers JSON parses to the server definition", () => {
+    expect(JSON.parse(mcpServersJson(ENTRY))).toEqual({
+      mcpServers: { mycontext: { command: "node", args: [ENTRY] } },
+    });
   });
 
-  it("resolves the Windows path from APPDATA", () => {
-    const result = claudeDesktopConfigPath("win32", { APPDATA: "C:\\Users\\x\\AppData\\Roaming" });
-    expect(result).toBe(path.join("C:\\Users\\x\\AppData\\Roaming", "Claude", "claude_desktop_config.json"));
+  it("VS Code JSON uses the servers key and stdio type", () => {
+    expect(JSON.parse(vsCodeServerJson(ENTRY))).toEqual({
+      servers: { mycontext: { type: "stdio", command: "node", args: [ENTRY] } },
+    });
+    expect(JSON.parse(vsCodeAddMcpArg(ENTRY))).toEqual({ name: "mycontext", command: "node", args: [ENTRY] });
   });
 
-  it("returns undefined on Windows with no APPDATA set", () => {
-    expect(claudeDesktopConfigPath("win32", {})).toBeUndefined();
-  });
-
-  it("returns undefined on platforms with no known Claude Desktop path", () => {
-    expect(claudeDesktopConfigPath("linux", {})).toBeUndefined();
-  });
-});
-
-describe("registerWithClaudeCli", () => {
-  it("returns not-found when the claude binary isn't on PATH", () => {
-    const calls: Array<[string, string[]]> = [];
-    const fakeRunner = (cmd: string, args: string[]): CommandResult => {
-      calls.push([cmd, args]);
-      return { status: null, found: false };
-    };
-    expect(registerWithClaudeCli(ENTRY, fakeRunner)).toBe("not-found");
-    expect(calls).toEqual([["claude", ["--version"]]]);
-  });
-
-  it("returns configured and calls mcp add with the right args when claude is present", () => {
-    const calls: Array<[string, string[]]> = [];
-    const fakeRunner = (cmd: string, args: string[]): CommandResult => {
-      calls.push([cmd, args]);
-      return { status: 0, found: true };
-    };
-    expect(registerWithClaudeCli(ENTRY, fakeRunner)).toBe("configured");
-    expect(calls[1]).toEqual([
-      "claude",
-      ["mcp", "add", "--transport", "stdio", "mycontext", "--", "node", ENTRY],
+  it("Codex TOML escapes Windows backslashes", () => {
+    expect(codexToml(ENTRY).split("\n")).toEqual([
+      "[mcp_servers.mycontext]",
+      'command = "node"',
+      `args = [${JSON.stringify(ENTRY)}]`,
     ]);
-  });
-
-  it("returns failed when claude is present but the add command errors", () => {
-    let call = 0;
-    const fakeRunner = (): CommandResult => {
-      call += 1;
-      return call === 1 ? { status: 0, found: true } : { status: 1, found: true };
-    };
-    expect(registerWithClaudeCli(ENTRY, fakeRunner)).toBe("failed");
+    expect(codexToml("C:\\Users\\alex\\index.js")).toContain('args = ["C:\\\\Users\\\\alex\\\\index.js"]');
   });
 });
 
-describe("registerWithClaudeDesktop", () => {
-  let dir: string;
-
-  beforeEach(async () => {
-    dir = await mkdtemp(path.join(tmpdir(), "mycontext-setup-test-"));
+describe("shellQuote", () => {
+  it("leaves simple paths alone", () => {
+    expect(shellQuote("/opt/mycontext/dist/index.js", "darwin")).toBe("/opt/mycontext/dist/index.js");
   });
 
-  afterEach(async () => {
-    await rm(dir, { recursive: true, force: true });
+  it.skipIf(process.platform === "win32")("round-trips spaces and quotes through a real shell", () => {
+    const out = execFileSync("/bin/sh", ["-c", `printf %s ${shellQuote(ENTRY, "linux")}`], { encoding: "utf-8" });
+    expect(out).toBe(ENTRY);
+    const json = vsCodeAddMcpArg(ENTRY);
+    expect(execFileSync("/bin/sh", ["-c", `printf %s ${shellQuote(json, "linux")}`], { encoding: "utf-8" })).toBe(json);
+  });
+});
+
+describe("onPath", () => {
+  it("finds a command in a PATH directory", () => {
+    expect(onPath("claude", fakeEnv(["/opt/homebrew/bin/claude"]))).toBe(true);
+    expect(onPath("claude", fakeEnv())).toBe(false);
   });
 
-  it("returns not-found when no config path is given", async () => {
-    expect(await registerWithClaudeDesktop(ENTRY, undefined)).toBe("not-found");
+  it("checks Windows executable extensions", () => {
+    const env = fakeEnv([path.join("C:\\bin", "codex.cmd")], { platform: "win32", pathVar: "C:\\bin" });
+    expect(onPath("codex", env)).toBe(true);
+  });
+});
+
+describe("detection", () => {
+  it("finds nothing on a bare machine", () => {
+    expect(detected(fakeEnv())).toEqual([]);
   });
 
-  it("returns not-found when the config file doesn't exist", async () => {
-    expect(await registerWithClaudeDesktop(ENTRY, path.join(dir, "missing.json"))).toBe("not-found");
+  it.each([
+    ["/Applications/ChatGPT.app", "ChatGPT desktop app and Codex CLI"],
+    ["/Users/alex/.codex", "ChatGPT desktop app and Codex CLI"],
+    ["/opt/homebrew/bin/claude", "Claude Code"],
+    ["/Users/alex/Library/Application Support/Claude", "Claude Desktop"],
+    ["/Applications/Cursor.app", "Cursor"],
+    ["/Users/alex/.gemini", "Gemini CLI"],
+    ["/Applications/Visual Studio Code.app", "VS Code (GitHub Copilot)"],
+  ])("%s -> %s", (present, name) => {
+    expect(detected(fakeEnv([present]))).toEqual([name]);
+  });
+});
+
+describe("renderSetupOutput", () => {
+  it("says it doesn't change app settings and always includes the web/phone export note", () => {
+    const out = renderSetupOutput(ENTRY, fakeEnv());
+    expect(out).toContain("doesn't change any app's settings");
+    expect(out).toContain("export your data");
   });
 
-  it("registers mycontext, preserves other content, and backs up the original", async () => {
-    const configPath = path.join(dir, "claude_desktop_config.json");
-    const original = JSON.stringify({ mcpServers: { other: { command: "node", args: ["/x.js"] } } }, null, 2);
-    await writeFile(configPath, original, "utf-8");
-
-    const result = await registerWithClaudeDesktop(ENTRY, configPath);
-    expect(result).toBe("configured");
-
-    const written = JSON.parse(await readFile(configPath, "utf-8"));
-    expect(written.mcpServers.other).toEqual({ command: "node", args: ["/x.js"] });
-    expect(written.mcpServers.mycontext).toEqual({ command: "node", args: [ENTRY] });
-
-    const backup = await readFile(`${configPath}.bak`, "utf-8");
-    expect(backup).toBe(original);
+  it("shows every app when none are installed", () => {
+    const out = renderSetupOutput(ENTRY, fakeEnv());
+    for (const app of APPS) expect(out).toContain(`== ${app.name} ==`);
   });
 
-  it("is idempotent -- reports already-configured and doesn't rewrite the file", async () => {
-    const configPath = path.join(dir, "claude_desktop_config.json");
-    const alreadyConfigured = JSON.stringify(
-      { mcpServers: { mycontext: { command: "node", args: [ENTRY] } } },
-      null,
-      2,
-    );
-    await writeFile(configPath, alreadyConfigured, "utf-8");
-
-    expect(await registerWithClaudeDesktop(ENTRY, configPath)).toBe("already-configured");
-    expect(await readFile(configPath, "utf-8")).toBe(alreadyConfigured);
+  it("shows detected apps in full and names the rest", () => {
+    const out = renderSetupOutput(ENTRY, fakeEnv(["/Applications/Cursor.app"]));
+    expect(out).toContain("== Cursor ==");
+    expect(out).toContain("/Users/alex/.cursor/mcp.json");
+    expect(out).not.toContain("== Claude Code ==");
+    expect(out).toMatch(/Also supported: .*ChatGPT.*Claude Code.*Gemini CLI/);
   });
 
-  it("throws instead of silently overwriting a config file it can't parse", async () => {
-    const configPath = path.join(dir, "claude_desktop_config.json");
-    await writeFile(configPath, "{ not valid json", "utf-8");
+  it("offers code --add-mcp only when the code command is installed", () => {
+    const app = ["/Applications/Visual Studio Code.app"];
+    expect(renderSetupOutput(ENTRY, fakeEnv(app))).not.toContain("code --add-mcp");
+    expect(renderSetupOutput(ENTRY, fakeEnv([...app, "/opt/homebrew/bin/code"]))).toContain("code --add-mcp");
+  });
 
-    await expect(registerWithClaudeDesktop(ENTRY, configPath)).rejects.toThrow(/couldn't parse/i);
+  it("omits the code --add-mcp shell command on Windows", () => {
+    const env = fakeEnv([path.join("C:\\bin", "code.cmd")], {
+      platform: "win32",
+      pathVar: "C:\\bin",
+      appData: "C:\\Users\\alex\\AppData\\Roaming",
+    });
+    const out = renderSetupOutput("C:\\mycontext\\dist\\index.js", env);
+    expect(out).toContain("MCP: Open User Configuration");
+    expect(out).not.toContain("code --add-mcp");
   });
 });

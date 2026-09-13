@@ -10,14 +10,14 @@ A local environment to collect, manage, and own your personal data.
 Includes:
 
 - a local workflow for personal data management
-- an MCP server, so your AI assistant reads and writes the data directly
+- an MCP server, so AI apps like ChatGPT, Claude, Cursor, and Gemini can read and write the data directly
 - plain JSON files you can read without this app, and export as Markdown, JSON, or CSV
 
 <table>
   <tr>
     <td align="center" width="33%"><a href="docs/images/home.png"><img src="docs/images/home.png" height="180" alt="The mycontext web UI home page"></a><br><sub>Log your personal data in the web UI</sub></td>
     <td align="center" width="33%"><a href="docs/images/journal_json_example.png"><img src="docs/images/journal_json_example.png" height="180" alt="A journal.json data file open in an editor"></a><br><sub>Stored as plain JSON files</sub></td>
-    <td align="center" width="33%"><a href="docs/images/hero.png"><img src="docs/images/hero.png" height="180" alt="Claude answering &quot;What have I been slipping on this week, and why?&quot; using mycontext data"></a><br><sub>Ask AI about your data</sub></td>
+    <td align="center" width="33%"><a href="docs/images/hero.png"><img src="docs/images/hero.png" height="180" alt="An AI assistant answering &quot;What have I been slipping on this week, and why?&quot; using mycontext data"></a><br><sub>Ask AI about your data</sub></td>
   </tr>
 </table>
 
@@ -27,6 +27,11 @@ Most AI assistants today keep their memory of you on their own servers. That mak
 
 mycontext keeps that data in plain files on your machine and this project contains tools to help you manage and utilize this data.
 
+## Works with
+
+AI apps that can run MCP servers on your computer, including the ChatGPT desktop app, Claude Code, Claude Desktop, Codex CLI, Cursor, Gemini CLI, and VS Code with GitHub Copilot. See [Connect an app](docs/mcp.md#connect-an-app).
+
+Web and mobile chat apps can't reach a server on your computer. For those, export your data from the web UI and paste it into the chat.
 
 ## Quickstart
 
@@ -37,7 +42,7 @@ npm install
 npm run setup
 ```
 
-`npm run setup` builds the project and registers `mycontext` with the `claude` CLI (if it's on your `PATH`) and with Claude Desktop (if its config file exists). Existing config is kept and backed up first. If it finds no client, it prints the config for you to add by hand. See [manual registration](docs/mcp.md#registration).
+`npm run setup` builds the project, then prints instructions for connecting mycontext to the AI apps it finds on your computer. It doesn't change any app's settings. Instructions for every supported app are in [Connect an app](docs/mcp.md#connect-an-app).
 
 Then start the web UI:
 
@@ -52,7 +57,7 @@ It opens at `http://127.0.0.1:4823`.
 | | |
 |---|---|
 | [Web UI](docs/web-ui.md) | The web app |
-| [MCP tools and resources](docs/mcp.md) | What an AI client can read and write |
+| [MCP tools and resources](docs/mcp.md) | What AI apps can read and write, and how to connect them |
 | [Data model](docs/data-model.md) | Files on disk, habit rules, schema versions, configuration |
 | [Journal summaries](docs/journal-summaries.md) | Summarizing entries to keep exports small |
 | [HTTP API](docs/http-api.md) | Routes for scripting |

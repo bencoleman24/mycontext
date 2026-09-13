@@ -102,19 +102,39 @@ Or in CLI mode, for scripting:
 npx @modelcontextprotocol/inspector --cli node dist/index.js --method tools/list
 ```
 
-## Registration
+## Connect an app
 
-`npm run setup` handles this automatically. To do it by hand:
+mycontext is a local MCP server: your AI app starts it on your computer. Any app that supports local (stdio) MCP servers can use it, and `npm run setup` prints these instructions with your path filled in.
 
-**Claude Code**
+Every app needs the same two things: the command `node`, and the path to `dist/index.js` in your clone. Replace `/absolute/path/to/mycontext` below with yours. Apps are listed alphabetically.
+
+### ChatGPT desktop app and Codex CLI
+
+Add this to `~/.codex/config.toml`, which the desktop app and CLI share:
+
+```toml
+[mcp_servers.mycontext]
+command = "node"
+args = ["/absolute/path/to/mycontext/dist/index.js"]
+```
+
+Or, with the Codex CLI installed:
+
+```bash
+codex mcp add mycontext -- node /absolute/path/to/mycontext/dist/index.js
+```
+
+Then restart the ChatGPT desktop app. MCP servers need a recent version of the app.
+
+### Claude Code
 
 ```bash
 claude mcp add --transport stdio mycontext -- node /absolute/path/to/mycontext/dist/index.js
 ```
 
-Add `--scope project` to write a project-scoped `.mcp.json` instead of registering at user scope.
+### Claude Desktop
 
-**Claude Desktop** — add to `claude_desktop_config.json` (macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`, Windows: `%APPDATA%\Claude\claude_desktop_config.json`):
+Quit the app, then add this to `claude_desktop_config.json` (macOS: `~/Library/Application Support/Claude/`, Windows: `%APPDATA%\Claude\`):
 
 ```json
 {
@@ -126,3 +146,57 @@ Add `--scope project` to write a project-scoped `.mcp.json` instead of registeri
   }
 }
 ```
+
+The app rewrites that file while it's running, so edit it only while the app is closed. Then reopen it.
+
+### Cursor
+
+Add this to `~/.cursor/mcp.json`, then restart Cursor:
+
+```json
+{
+  "mcpServers": {
+    "mycontext": {
+      "command": "node",
+      "args": ["/absolute/path/to/mycontext/dist/index.js"]
+    }
+  }
+}
+```
+
+### Gemini CLI
+
+```bash
+gemini mcp add --scope user mycontext node /absolute/path/to/mycontext/dist/index.js
+```
+
+### VS Code (GitHub Copilot)
+
+```bash
+code --add-mcp '{"name":"mycontext","command":"node","args":["/absolute/path/to/mycontext/dist/index.js"]}'
+```
+
+Or run **MCP: Open User Configuration** in VS Code and add this under `"servers"`:
+
+```json
+{
+  "servers": {
+    "mycontext": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["/absolute/path/to/mycontext/dist/index.js"]
+    }
+  }
+}
+```
+
+VS Code asks you to confirm you trust the server before it starts.
+
+### Web and mobile chat apps
+
+ChatGPT, Claude, and Gemini on the web or on a phone only connect to MCP servers hosted on the internet, if at all, so they can't reach mycontext. Export your data from the web UI's Data page and paste it into the chat instead.
+
+### If the app shows mycontext as disconnected
+
+- The app may not find `node`. Use the full path from `which node` (macOS and Linux) or `where node` (Windows) as the command.
+- On macOS, don't keep the clone in a Desktop or Documents folder synced with iCloud. macOS can move those files to iCloud to save space, and the server fails to start when it can't read them.

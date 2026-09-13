@@ -1,205 +1,222 @@
 #!/usr/bin/env node
-import { execFileSync, spawnSync } from "node:child_process";
-import { randomUUID } from "node:crypto";
+import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { readFile, rename, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
 const distEntry = path.join(repoRoot, "dist", "index.js");
 
-// --- Claude Code CLI registration ---------------------------------------
+// Setup builds the server and prints how to connect each AI app. It never
+// edits an app's settings itself: every app gets the same treatment, and a
+// privacy tool shouldn't write into other apps' config files unasked.
 
-export interface CommandResult {
-  status: number | null;
-  /** false if the binary itself couldn't be found (ENOENT), as opposed to running and failing. */
-  found: boolean;
+/** Everything detection needs from the machine, injectable for tests. */
+export interface Environment {
+  platform: NodeJS.Platform;
+  home: string;
+  pathVar: string;
+  appData?: string;
+  exists: (p: string) => boolean;
 }
 
-export type CommandRunner = (cmd: string, args: string[]) => CommandResult;
-
-export const realCommandRunner: CommandRunner = (cmd, args) => {
-  const result = spawnSync(cmd, args, { stdio: "inherit", shell: process.platform === "win32" });
-  const err = result.error as NodeJS.ErrnoException | undefined;
-  return { status: result.status, found: !err || err.code !== "ENOENT" };
+export const realEnvironment: Environment = {
+  platform: process.platform,
+  home: os.homedir(),
+  pathVar: process.env.PATH ?? "",
+  appData: process.env.APPDATA,
+  exists: existsSync,
 };
 
-export type CliRegisterResult = "configured" | "failed" | "not-found";
-
-export function registerWithClaudeCli(
-  entryPath: string,
-  runner: CommandRunner = realCommandRunner,
-): CliRegisterResult {
-  const versionCheck = runner("claude", ["--version"]);
-  if (!versionCheck.found) return "not-found";
-
-  const addResult = runner("claude", [
-    "mcp",
-    "add",
-    "--transport",
-    "stdio",
-    "mycontext",
-    "--",
-    "node",
-    entryPath,
-  ]);
-  return addResult.status === 0 ? "configured" : "failed";
+export function onPath(cmd: string, env: Environment): boolean {
+  const sep = env.platform === "win32" ? ";" : ":";
+  const exts = env.platform === "win32" ? ["", ".exe", ".cmd", ".bat"] : [""];
+  return env.pathVar
+    .split(sep)
+    .filter(Boolean)
+    .some((dir) => exts.some((ext) => env.exists(path.join(dir, cmd + ext))));
 }
 
-// --- Claude Desktop config merge -----------------------------------------
+/** Quote a value for pasting into a shell. */
+export function shellQuote(value: string, platform: NodeJS.Platform): string {
+  if (platform === "win32") return `"${value.replace(/"/g, '\\"')}"`;
+  if (/^[\w@%+=:,./-]+$/.test(value)) return value;
+  return `'${value.replace(/'/g, "'\\''")}'`;
+}
 
-export function claudeDesktopConfigPath(
-  platform: NodeJS.Platform = process.platform,
-  env: NodeJS.ProcessEnv = process.env,
-): string | undefined {
-  if (platform === "darwin") {
-    return path.join(
-      os.homedir(),
-      "Library",
-      "Application Support",
-      "Claude",
-      "claude_desktop_config.json",
-    );
+export function mcpServersJson(entry: string): string {
+  return JSON.stringify({ mcpServers: { mycontext: { command: "node", args: [entry] } } }, null, 2);
+}
+
+export function vsCodeServerJson(entry: string): string {
+  return JSON.stringify({ servers: { mycontext: { type: "stdio", command: "node", args: [entry] } } }, null, 2);
+}
+
+export function vsCodeAddMcpArg(entry: string): string {
+  return JSON.stringify({ name: "mycontext", command: "node", args: [entry] });
+}
+
+/** TOML basic strings use the same escapes as JSON strings. */
+export function codexToml(entry: string): string {
+  return `[mcp_servers.mycontext]\ncommand = "node"\nargs = [${JSON.stringify(entry)}]`;
+}
+
+function indent(text: string): string {
+  return text
+    .split("\n")
+    .map((line) => `    ${line}`)
+    .join("\n");
+}
+
+function claudeDesktopConfigPath(env: Environment): string | undefined {
+  if (env.platform === "darwin") {
+    return path.join(env.home, "Library", "Application Support", "Claude", "claude_desktop_config.json");
   }
-  if (platform === "win32" && env.APPDATA) {
-    return path.join(env.APPDATA, "Claude", "claude_desktop_config.json");
+  if (env.platform === "win32" && env.appData) {
+    return path.join(env.appData, "Claude", "claude_desktop_config.json");
   }
   return undefined;
 }
 
-/**
- * Pure merge: adds a `mycontext` entry to `mcpServers` without touching
- * anything else already in the config. If `mycontext` is already present,
- * it's left completely alone -- re-running setup must never clobber a
- * customization someone made by hand (an extra env var, etc.).
- */
-export function mergeMcpServerConfig(
-  existing: unknown,
-  entryPath: string,
-): { config: Record<string, unknown>; alreadyPresent: boolean } {
-  const config =
-    typeof existing === "object" && existing !== null && !Array.isArray(existing)
-      ? { ...(existing as Record<string, unknown>) }
-      : {};
-
-  const mcpServers =
-    typeof config.mcpServers === "object" && config.mcpServers !== null
-      ? { ...(config.mcpServers as Record<string, unknown>) }
-      : {};
-
-  if (mcpServers.mycontext) {
-    return { config: { ...config, mcpServers }, alreadyPresent: true };
-  }
-
-  mcpServers.mycontext = { command: "node", args: [entryPath] };
-  return { config: { ...config, mcpServers }, alreadyPresent: false };
+function vsCodeUserDir(env: Environment): string | undefined {
+  if (env.platform === "darwin") return path.join(env.home, "Library", "Application Support", "Code");
+  if (env.platform === "win32") return env.appData ? path.join(env.appData, "Code") : undefined;
+  return path.join(env.home, ".config", "Code");
 }
 
-export type DesktopRegisterResult = "configured" | "already-configured" | "not-found";
-
-export async function registerWithClaudeDesktop(
-  entryPath: string,
-  configPath: string | undefined,
-): Promise<DesktopRegisterResult> {
-  if (!configPath || !existsSync(configPath)) return "not-found";
-
-  const raw = await readFile(configPath, "utf-8");
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch (err) {
-    throw new Error(`Couldn't parse ${configPath} as JSON: ${(err as Error).message}`);
-  }
-
-  const { config, alreadyPresent } = mergeMcpServerConfig(parsed, entryPath);
-  if (alreadyPresent) return "already-configured";
-
-  const backupPath = `${configPath}.bak`;
-  if (!existsSync(backupPath)) {
-    await writeFile(backupPath, raw, "utf-8");
-  }
-
-  const tmpPath = `${configPath}.${randomUUID()}.tmp`;
-  await writeFile(tmpPath, JSON.stringify(config, null, 2), "utf-8");
-  await rename(tmpPath, configPath);
-  return "configured";
+export interface McpApp {
+  name: string;
+  detected: (env: Environment) => boolean;
+  instructions: (entry: string, env: Environment) => string;
 }
 
-// --- Orchestration ---------------------------------------------------------
-
-function printManualInstructions(entryPath: string): void {
-  console.log(`
-Couldn't auto-register mycontext anywhere. Add it manually:
-
-Claude Code:
-  claude mcp add --transport stdio mycontext -- node ${entryPath}
-
-Claude Desktop (claude_desktop_config.json):
+/** Kept in alphabetical order, so no provider is listed first by preference. */
+export const APPS: McpApp[] = [
   {
-    "mcpServers": {
-      "mycontext": {
-        "command": "node",
-        "args": ["${entryPath}"]
-      }
-    }
+    name: "ChatGPT desktop app and Codex CLI",
+    detected: (env) =>
+      onPath("codex", env) ||
+      env.exists(path.join(env.home, ".codex")) ||
+      (env.platform === "darwin" && env.exists("/Applications/ChatGPT.app")),
+    instructions: (entry, env) =>
+      [
+        `Add this to ${path.join(env.home, ".codex", "config.toml")}, which the desktop app and CLI share:`,
+        indent(codexToml(entry)),
+        "Or, with the Codex CLI installed, run:",
+        indent(`codex mcp add mycontext -- node ${shellQuote(entry, env.platform)}`),
+        "Then restart the ChatGPT desktop app. MCP servers need a recent version of the app.",
+      ].join("\n"),
+  },
+  {
+    name: "Claude Code",
+    detected: (env) => onPath("claude", env),
+    instructions: (entry, env) =>
+      ["Run:", indent(`claude mcp add --transport stdio mycontext -- node ${shellQuote(entry, env.platform)}`)].join(
+        "\n",
+      ),
+  },
+  {
+    name: "Claude Desktop",
+    detected: (env) => {
+      const config = claudeDesktopConfigPath(env);
+      return (
+        (config !== undefined && env.exists(path.dirname(config))) ||
+        (env.platform === "darwin" && env.exists("/Applications/Claude.app"))
+      );
+    },
+    instructions: (entry, env) =>
+      [
+        `Quit the app, then add this to ${claudeDesktopConfigPath(env) ?? "claude_desktop_config.json (Settings > Developer > Edit Config)"}:`,
+        indent(mcpServersJson(entry)),
+        "The app rewrites that file while it's running, so edit it only while the app is closed. Then reopen it.",
+      ].join("\n"),
+  },
+  {
+    name: "Cursor",
+    detected: (env) =>
+      env.exists(path.join(env.home, ".cursor")) || (env.platform === "darwin" && env.exists("/Applications/Cursor.app")),
+    instructions: (entry, env) =>
+      [
+        `Add this to ${path.join(env.home, ".cursor", "mcp.json")}:`,
+        indent(mcpServersJson(entry)),
+        "Then restart Cursor.",
+      ].join("\n"),
+  },
+  {
+    name: "Gemini CLI",
+    detected: (env) => onPath("gemini", env) || env.exists(path.join(env.home, ".gemini")),
+    instructions: (entry, env) =>
+      ["Run:", indent(`gemini mcp add --scope user mycontext node ${shellQuote(entry, env.platform)}`)].join("\n"),
+  },
+  {
+    name: "VS Code (GitHub Copilot)",
+    detected: (env) => {
+      const dir = vsCodeUserDir(env);
+      return (
+        onPath("code", env) ||
+        (dir !== undefined && env.exists(dir)) ||
+        (env.platform === "darwin" && env.exists("/Applications/Visual Studio Code.app"))
+      );
+    },
+    instructions: (entry, env) => {
+      const openConfig = `"MCP: Open User Configuration" in VS Code and add this under "servers":`;
+      // The `code` command is optional on macOS, and its JSON argument doesn't survive Windows shell quoting.
+      const lines =
+        onPath("code", env) && env.platform !== "win32"
+          ? ["Run:", indent(`code --add-mcp ${shellQuote(vsCodeAddMcpArg(entry), env.platform)}`), `Or run ${openConfig}`]
+          : [`Run ${openConfig}`];
+      return [
+        ...lines,
+        indent(vsCodeServerJson(entry)),
+        "VS Code asks you to confirm you trust the server before it starts.",
+      ].join("\n");
+    },
+  },
+];
+
+export function renderSetupOutput(entry: string, env: Environment): string {
+  const found = APPS.filter((app) => app.detected(env));
+  const shown = found.length > 0 ? found : APPS;
+  const lines = [
+    "",
+    "mycontext is built. Setup doesn't change any app's settings; connect the apps you use with the instructions below.",
+    `The server runs with: node ${shellQuote(entry, env.platform)}`,
+    "",
+    found.length > 0
+      ? "AI apps found on this computer:"
+      : "No supported AI apps found on this computer. Instructions for each:",
+    "",
+  ];
+  for (const app of shown) {
+    lines.push(`== ${app.name} ==`, app.instructions(entry, env), "");
   }
-`);
+  const others = APPS.filter((app) => !found.includes(app));
+  if (found.length > 0 && others.length > 0) {
+    lines.push(`Also supported: ${others.map((app) => app.name).join(", ")}. See docs/mcp.md#connect-an-app`, "");
+  }
+  lines.push(
+    "Using ChatGPT, Claude, or Gemini on the web or on a phone? Those can't reach a server on your computer.",
+    "Instead, export your data from the web UI's Data page and paste it into the chat.",
+  );
+  return lines.join("\n");
 }
 
-async function main(): Promise<void> {
-  if (!existsSync(distEntry)) {
-    console.log("Building...");
-    execFileSync("npm", ["run", "build"], {
-      cwd: repoRoot,
-      stdio: "inherit",
-      shell: process.platform === "win32",
-    });
-  }
-
-  let configuredAnywhere = false;
-
-  const cliResult = registerWithClaudeCli(distEntry);
-  if (cliResult === "configured") {
-    console.log("Registered mycontext with the Claude Code CLI.");
-    configuredAnywhere = true;
-  } else if (cliResult === "failed") {
-    console.log(
-      "`claude mcp add` didn't succeed -- if mycontext is already registered, you're all set; otherwise see the manual instructions below.",
-    );
-  } else {
-    console.log("`claude` CLI not found on PATH -- skipping Claude Code auto-registration.");
-  }
-
-  const desktopPath = claudeDesktopConfigPath();
-  try {
-    const desktopResult = await registerWithClaudeDesktop(distEntry, desktopPath);
-    if (desktopResult === "configured") {
-      console.log(
-        `Registered mycontext in Claude Desktop's config (${desktopPath}). Restart Claude Desktop to pick it up.`,
-      );
-      configuredAnywhere = true;
-    } else if (desktopResult === "already-configured") {
-      console.log("mycontext is already registered in Claude Desktop's config.");
-      configuredAnywhere = true;
-    } else {
-      console.log("Claude Desktop config not found -- skipping.");
-    }
-  } catch (err) {
-    console.log(`Couldn't update Claude Desktop's config: ${(err as Error).message}`);
-  }
-
-  if (!configuredAnywhere) {
-    printManualInstructions(distEntry);
-  } else {
-    console.log("\nSetup complete.");
-  }
+function main(): void {
+  console.log("Building...");
+  execFileSync("npm", ["run", "build"], {
+    cwd: repoRoot,
+    stdio: "inherit",
+    shell: process.platform === "win32",
+  });
+  console.log(renderSetupOutput(distEntry, realEnvironment));
 }
 
 const isMain = process.argv[1] !== undefined && import.meta.url === `file://${process.argv[1]}`;
 if (isMain) {
-  main().catch((err) => {
+  try {
+    main();
+  } catch (err) {
     console.error("Setup failed:", err);
     process.exit(1);
-  });
+  }
 }

@@ -21,9 +21,9 @@ Data is stored as JSON rather than SQLite so you can read it without this app. T
 ```bash
 npm run dev        # run the MCP server with tsx, no build step
 npm run web        # run the web UI
-npm run setup      # build and register with any MCP client found
+npm run setup      # build, then print how to connect each AI app
 npm run build      # bundle the MCP server to dist/index.js
-npm test           # 111 tests across 11 files
+npm test           # 118 tests across 11 files
 npm run typecheck
 npm run lint
 ```
