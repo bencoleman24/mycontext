@@ -72,6 +72,8 @@ Two files in the codebase can make network calls:
 - [`src/lib/summarizer.ts`](src/lib/summarizer.ts) — calls Ollama on `localhost`, ONLY when you ask for a summary
 - [`src/web/public/app.js`](src/web/public/app.js) — the web UI calling its own backend on `127.0.0.1`
 
+[`test/noExternalNetworkCalls.test.ts`](test/noExternalNetworkCalls.test.ts) checks this. If any other file starts making network calls, the build fails.
+
 
 ## License
 
