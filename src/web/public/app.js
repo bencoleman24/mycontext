@@ -30,7 +30,14 @@ async function api(path, { method = "GET", body } = {}) {
   const data = await res.json().catch(() => null);
   if (!res.ok) {
     const reason = data?.error ?? `HTTP ${res.status}`;
-    throw new Error(`${method} /api/${path} → ${reason}`);
+    // The server's message is written for a person, so that's what surfaces.
+    // The route and status go to the console, where they're useful for debugging.
+    console.error(`${method} /api/${path} → ${reason}`);
+    const err = new Error(reason);
+    err.method = method;
+    err.path = `/api/${path}`;
+    err.status = res.status;
+    throw err;
   }
   return data;
 }
@@ -953,7 +960,7 @@ document.body.addEventListener("click", async (e) => {
       renderExportJournalDetailChips();
     }
   } catch (err) {
-    alert(`Something went wrong: ${err.message}`);
+    alert(err.message);
   }
 });
 
